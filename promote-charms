@@ -14,6 +14,7 @@ OPENSTACK_CHARMS = [
     "nova-k8s",
     "placement-k8s",
     "neutron-k8s",
+    "heat-k8s",
     "horizon-k8s",
     "cinder-k8s",
     "cinder-ceph-k8s",
@@ -26,8 +27,9 @@ OVN_CHARMS = [
 ]
 
 WORKFLOWS = {
-    "candidate": "stable",
     "edge": "beta",
+    "beta": "candidate",
+    "candidate": "stable",
 }
 
 
@@ -66,7 +68,9 @@ def release_command(
                         if source_release["status"] == "tracking":
                             # Source channel is tracking the channel
                             # above, skip
-                            print("Source track follows target track, skipping")
+                            print(
+                                "Source track follows target track, skipping"
+                            )
                             continue
                         if (
                             source_release["revision"]
@@ -96,7 +100,9 @@ def release_command(
 
 @click.command()
 @click.option(
-    "--source", default="candidate", help="Source channel for promotion",
+    "--source",
+    default="candidate",
+    help="Source channel for promotion",
     type=click.Choice(WORKFLOWS.keys()),
     show_default=True,
 )
@@ -105,7 +111,8 @@ def promote(source):
     if source not in WORKFLOWS.keys():
         raise click.BadOptionUsage(
             option_name="source",
-            message=f"source {source} not supported - must be one of {','.join(WORKFLOWS.keys())}")
+            message=f"source {source} not supported - must be one of {','.join(WORKFLOWS.keys())}",
+        )
 
     release_cmds = []
 
@@ -140,8 +147,12 @@ def promote(source):
             release_cmds.append(cmd)
 
     for cmd in release_cmds:
-        cmd = " ".join(cmd)
-        print(f"Running cmd: {cmd}")
+        pcmd = " ".join(cmd)
+        print(f"Running cmd: {pcmd}")
+        process = subprocess.run(
+            cmd, capture_output=True, text=True, check=True
+        )
+        print(process.stdout)
 
 
 if __name__ == "__main__":
