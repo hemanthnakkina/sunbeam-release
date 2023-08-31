@@ -32,6 +32,14 @@ WORKFLOWS = {
     "candidate": "stable",
 }
 
+TRACKS = {
+    "antelope": {
+        "openstack": "2023.1",
+        "ovn": "23.03",
+        "rabbitmq": "3.9"
+    }
+}
+
 
 def release_command(
     app: str,
@@ -106,7 +114,14 @@ def release_command(
     type=click.Choice(WORKFLOWS.keys()),
     show_default=True,
 )
-def promote(source):
+@click.option(
+    "--release",
+    default="antelope",
+    help="Sunbeam release for tracks",
+    type=click.Choice(TRACKS.keys()),
+    show_default=True,
+)
+def promote(source: str, release: str):
     """Promote charms between channels."""
     if source not in WORKFLOWS.keys():
         raise click.BadOptionUsage(
@@ -119,7 +134,7 @@ def promote(source):
     for charm in OPENSTACK_CHARMS:
         cmd = release_command(
             charm,
-            track="2023.1",
+            track=TRACKS[release]["openstack"],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
@@ -129,7 +144,7 @@ def promote(source):
     for charm in OVN_CHARMS:
         cmd = release_command(
             charm,
-            track="23.03",
+            track=TRACKS[release]["ovn"],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
@@ -139,7 +154,7 @@ def promote(source):
     for charm in ["rabbitmq-k8s"]:
         cmd = release_command(
             charm,
-            track="3.9",
+            track=TRACKS[release]["rabbitmq"],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
