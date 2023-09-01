@@ -186,7 +186,3 @@ def promote(source: str, release: str):
             cmd, capture_output=True, text=True, check=True
         )
         print(process.stdout)
-
-
-if __name__ == "__main__":
-    promote()
