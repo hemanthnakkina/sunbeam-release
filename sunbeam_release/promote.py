@@ -136,7 +136,8 @@ def release_command(
     type=click.Choice(TRACKS.keys()),
     show_default=True,
 )
-def promote(source: str, release: str) -> None:
+@click.option("--dry-run", "-d", default=False, is_flag=True)
+def promote(source: str, release: str, dry_run: bool) -> None:
     """Promote charms between channels."""
     if source not in WORKFLOWS.keys():
         raise click.BadOptionUsage(
@@ -182,7 +183,8 @@ def promote(source: str, release: str) -> None:
     for cmd in release_cmds:
         pcmd = " ".join(cmd)
         print(f"Running cmd: {pcmd}")
-        process = subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
-        print(process.stdout)
+        if not dry_run:
+            process = subprocess.run(
+                cmd, capture_output=True, text=True, check=True
+            )
+            print(process.stdout)
