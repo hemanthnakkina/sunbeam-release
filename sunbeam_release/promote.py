@@ -136,7 +136,7 @@ def release_command(
     type=click.Choice(TRACKS.keys()),
     show_default=True,
 )
-def promote(source: str, release: str):
+def promote(source: str, release: str) -> None:
     """Promote charms between channels."""
     if source not in WORKFLOWS.keys():
         raise click.BadOptionUsage(

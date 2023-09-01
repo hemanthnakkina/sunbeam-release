@@ -16,7 +16,8 @@
 """Main entry point for sunbeam release tools."""
 
 import click
-from promote import (
+
+from sunbeam_release.promote import (
     promote,
 )
 
@@ -26,14 +27,18 @@ CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
 @click.group("init", context_settings=CONTEXT_SETTINGS)
+@click.option("--quiet", "-q", default=False, is_flag=True)
+@click.option("--verbose", "-v", default=False, is_flag=True)
 @click.pass_context
-def cli(ctx):
+def cli(ctx, quiet, verbose):
     """Release helpers for OpenStack Sunbeam."""
 
 
 def main():
     """Main entry point for sunbeam-release."""
     cli.add_command(promote)
+
+    cli()
 
 
 if __name__ == "__main__":
