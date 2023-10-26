@@ -47,7 +47,8 @@ WORKFLOWS = {
 }
 
 TRACKS = {
-    "antelope": {"openstack": "2023.1", "ovn": "23.03", "rabbitmq": "3.9"}
+    "antelope": {"openstack": "2023.1", "ovn": "23.03", "rabbitmq": "3.9"},
+    "bobcat": {"openstack": "2023.2", "ovn": "23.09", "rabbitmq": "3.12"}
 }
 
 
