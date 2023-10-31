@@ -23,15 +23,23 @@ from typing import (
 import click
 
 OPENSTACK_CHARMS = [
+    "aodh-k8s",
+    "barbican-k8s",
+    "ceilometer-k8s",
     "keystone-k8s",
+    "keystone-ldap-k8s",
     "glance-k8s",
     "nova-k8s",
     "placement-k8s",
+    "magnum-k8s",
+    "gnocchi-k8s",
     "neutron-k8s",
+    "octavia-k8s",
     "heat-k8s",
     "horizon-k8s",
     "cinder-k8s",
     "cinder-ceph-k8s",
+    "designate-k8s",
     "openstack-hypervisor",
 ]
 
@@ -47,8 +55,18 @@ WORKFLOWS = {
 }
 
 TRACKS = {
-    "antelope": {"openstack": "2023.1", "ovn": "23.03", "rabbitmq": "3.9"},
-    "bobcat": {"openstack": "2023.2", "ovn": "23.09", "rabbitmq": "3.12"}
+    "antelope": {
+        "openstack": "2023.1",
+        "ovn": "23.03",
+        "rabbitmq-k8s": "3.9",
+        "designate-bind-k8s": "9",
+    },
+    "bobcat": {
+        "openstack": "2023.2",
+        "ovn": "23.09",
+        "rabbitmq-k8s": "3.12",
+        "designate-bind-k8s": "9",
+    },
 }
 
 
@@ -171,10 +189,10 @@ def promote(source: str, release: str, dry_run: bool) -> None:
         if cmd:
             release_cmds.append(cmd)
 
-    for charm in ["rabbitmq-k8s"]:
+    for charm in ["rabbitmq-k8s", "designate-bind-k8s"]:
         cmd = release_command(
             charm,
-            track=TRACKS[release]["rabbitmq"],
+            track=TRACKS[release][charm],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
