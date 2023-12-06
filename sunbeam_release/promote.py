@@ -40,6 +40,7 @@ OPENSTACK_CHARMS = [
     "cinder-k8s",
     "cinder-ceph-k8s",
     "designate-k8s",
+    "openstack-exporter-k8s",
     "openstack-hypervisor",
 ]
 
