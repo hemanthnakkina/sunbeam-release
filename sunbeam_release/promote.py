@@ -59,7 +59,7 @@ TRACKS = {
     "antelope": {
         "openstack": "2023.1",
         "ovn": "23.03",
-        "rabbitmq-k8s": "3.9",
+        "rabbitmq-k8s": "3.12",
         "designate-bind-k8s": "9",
     },
     "bobcat": {
