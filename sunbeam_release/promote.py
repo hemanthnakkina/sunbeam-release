@@ -42,6 +42,7 @@ OPENSTACK_CHARMS = [
     "designate-k8s",
     "openstack-exporter-k8s",
     "openstack-hypervisor",
+    "tempest-k8s",
 ]
 
 OVN_CHARMS = [
@@ -50,8 +51,7 @@ OVN_CHARMS = [
 ]
 
 WORKFLOWS = {
-    "edge": "beta",
-    "beta": "candidate",
+    "edge": "candidate",
     "candidate": "stable",
 }
 
@@ -65,6 +65,12 @@ TRACKS = {
     "bobcat": {
         "openstack": "2023.2",
         "ovn": "23.09",
+        "rabbitmq-k8s": "3.12",
+        "designate-bind-k8s": "9",
+    },
+    "caracal": {
+        "openstack": "2024.1",
+        "ovn": "24.03",
         "rabbitmq-k8s": "3.12",
         "designate-bind-k8s": "9",
     },
