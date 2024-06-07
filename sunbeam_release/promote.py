@@ -43,6 +43,7 @@ OPENSTACK_CHARMS = [
     "openstack-exporter-k8s",
     "openstack-hypervisor",
     "tempest-k8s",
+    "sunbeam-machine",
 ]
 
 OVN_CHARMS = [
@@ -51,7 +52,8 @@ OVN_CHARMS = [
 ]
 
 WORKFLOWS = {
-    "edge": "candidate",
+    "edge": "beta",
+    "beta": "candidate",
     "candidate": "stable",
 }
 
