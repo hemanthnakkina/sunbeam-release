@@ -18,6 +18,7 @@ import json
 import subprocess
 from typing import (
     Union,
+    List,
 )
 
 import click
@@ -95,8 +96,8 @@ def release_command(
     track: str,
     source_channel: str,
     target_channel: str,
-    base_channel: str = "22.04",
-    base_arch: str = "amd64",
+    base_channels: List[str] = ["22.04", "24.04"],
+    base_archs: List[str] = ["amd64"],
 ) -> Union[str, None]:
     """Generate a charmcraft release command to promote between tracks."""
     release_cmd = None
@@ -108,8 +109,8 @@ def release_command(
         if s["track"] == track:
             for mapping in s["mappings"]:
                 if (
-                    mapping["base"]["channel"] == base_channel
-                    and mapping["base"]["architecture"] == base_arch
+                    mapping["base"]["channel"] in base_channels
+                    and mapping["base"]["architecture"] in base_archs
                 ):
                     source_release = None
                     target_release = None
