@@ -29,6 +29,8 @@ OPENSTACK_CHARMS = [
     "ceilometer-k8s",
     "cinder-ceph-k8s",
     "cinder-k8s",
+    "cinder-volume",
+    "cinder-volume-ceph",
     "designate-k8s",
     "glance-k8s",
     "gnocchi-k8s",
