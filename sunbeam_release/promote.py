@@ -65,6 +65,11 @@ OVN_CHARMS = [
     "ovn-central-k8s",
 ]
 
+CONSUL_CHARMS =[
+    "consul-k8s",
+    "consul-client",
+]
+
 WORKFLOWS = {
     "edge": "beta",
     "beta": "candidate",
@@ -89,6 +94,7 @@ TRACKS = {
         "ovn": "24.03",
         "rabbitmq-k8s": "3.12",
         "designate-bind-k8s": "9",
+        "consul": "1.19",
     },
 }
 
@@ -211,6 +217,17 @@ def promote(source: str, release: str, dry_run: bool) -> None:
         )
         if cmd:
             release_cmds.append(cmd)
+
+    for charm in CONSUL_CHARMS:
+        if "consul" in TRACKS[release]:
+            cmd = release_command(
+                charm,
+                track=TRACKS[release]["consul"],
+                source_channel=source,
+                target_channel=WORKFLOWS[source],
+            )
+            if cmd:
+                release_cmds.append(cmd)
 
     for charm in ["rabbitmq-k8s", "designate-bind-k8s"]:
         cmd = release_command(
