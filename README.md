@@ -11,6 +11,7 @@ The sunbeam-release tool makes use of charmcraft which can be installed as a
 snap:
 
     sudo snap install --classic charmcraft
+    sudo snap install snapcraft
 
 charmcraft must also be logged into the charmhub in order for sunbeam-release
 operators to work:

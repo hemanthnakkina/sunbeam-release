@@ -77,6 +77,19 @@ CONSUL_CHARMS =[
     "consul-client",
 ]
 
+OPENSTACK_SNAPS = [
+    "openstack",
+    "openstack-hypervisor",
+    "cinder-volume",
+    "openstack-network-agents",
+    "manila-data",
+    "epa-orchestrator",
+]
+
+CONSUL_SNAPS = [
+    "consul-client",
+]
+
 WORKFLOWS = {
     "edge": "beta",
     "beta": "candidate",
@@ -111,6 +124,51 @@ def charm_metadata(app: str) -> dict:
     cmd = ["charmcraft", "status", app, "--format", "json"]
     process = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return json.loads(process.stdout.strip())
+
+
+def snap_metadata(snap: str) -> dict:
+    """Retrieve metadata about a specific snap."""
+    cmd = ["snap", "info", snap]
+    process = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    output = process.stdout.strip()
+
+    # Parse the channels section
+    channels = {}
+    in_channels_section = False
+
+    for line in output.split('\n'):
+        if line.startswith('channels:'):
+            in_channels_section = True
+            continue
+
+        if in_channels_section:
+            # Stop if we hit an empty line or a new section
+            if not line.strip() or (line and not line.startswith(' ')):
+                break
+
+            # Parse channel line format: "  track/risk:  version date (revision) size -"
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                channel = parts[0].rstrip(':')
+                if parts[1] == '--':
+                    # Channel is empty
+                    channels[channel] = None
+                elif parts[1] == '^':
+                    # Channel is tracking the channel above
+                    channels[channel] = 'tracking'
+                else:
+                    # Extract revision from parentheses
+                    revision = None
+                    for part in parts:
+                        if part.startswith('(') and part.endswith(')'):
+                            revision = part.strip('()')
+                            break
+                    channels[channel] = {
+                        'version': parts[1],
+                        'revision': revision
+                    }
+
+    return {'channels': channels}
 
 
 def release_command(
@@ -174,6 +232,64 @@ def release_command(
                         break
 
     return release_cmd
+
+
+def snap_promote_command(
+    snap: str,
+    track: str,
+    source_channel: str,
+    target_channel: str,
+) -> Union[str, None]:
+    """Generate a snapcraft promote command to promote between channels."""
+    from_channel = f"{track}/{source_channel}"
+    to_channel = f"{track}/{target_channel}"
+
+    print(f"Checking snap {snap}: {from_channel}->{to_channel}")
+
+    try:
+        snap_info = snap_metadata(snap)
+        channels = snap_info.get('channels', {})
+
+        source_info = channels.get(from_channel)
+        target_info = channels.get(to_channel)
+
+        # Check if source channel exists and has content
+        if source_info is None:
+            print(f"  Source channel {from_channel} is empty, skipping")
+            return None
+
+        if source_info == 'tracking':
+            print(f"  Source channel {from_channel} is tracking, skipping")
+            return None
+
+        # Check if target channel exists
+        if target_info is None:
+            print(f"  Target channel {to_channel} is empty, will promote")
+        elif target_info == 'tracking':
+            print(f"  Target channel {to_channel} is tracking, will promote")
+        elif isinstance(source_info, dict) and isinstance(target_info, dict):
+            # Compare revisions
+            if source_info.get('revision') == target_info.get('revision'):
+                print(f"  Source and target revision match ({source_info.get('revision')}), skipping")
+                return None
+            else:
+                print(f"  Source revision {source_info.get('revision')} != target revision {target_info.get('revision')}, will promote")
+
+        promote_cmd = [
+            "snapcraft",
+            "promote",
+            snap,
+            "--from-channel",
+            from_channel,
+            "--to-channel",
+            to_channel,
+        ]
+
+        return promote_cmd
+
+    except subprocess.CalledProcessError as e:
+        print(f"  Error getting snap info: {e}")
+        return None
 
 
 @click.command()
@@ -246,11 +362,38 @@ def promote(source: str, release: str, dry_run: bool) -> None:
         if cmd:
             release_cmds.append(cmd)
 
+    # Promote OpenStack snaps
+    for snap in OPENSTACK_SNAPS:
+        cmd = snap_promote_command(
+            snap,
+            track=TRACKS[release]["openstack"],
+            source_channel=source,
+            target_channel=WORKFLOWS[source],
+        )
+        if cmd:
+            release_cmds.append(cmd)
+
+    # Promote Consul snaps
+    for snap in CONSUL_SNAPS:
+        if "consul" in TRACKS[release]:
+            cmd = snap_promote_command(
+                snap,
+                track=TRACKS[release]["consul"],
+                source_channel=source,
+                target_channel=WORKFLOWS[source],
+            )
+            if cmd:
+                release_cmds.append(cmd)
+
     for cmd in release_cmds:
         pcmd = " ".join(cmd)
         print(f"Running cmd: {pcmd}")
         if not dry_run:
-            process = subprocess.run(
-                cmd, capture_output=True, text=True, check=True
-            )
-            print(process.stdout)
+            # For snapcraft promote commands, allow interactive input
+            if cmd[0] == "snapcraft" and cmd[1] == "promote":
+                process = subprocess.run(cmd, check=True)
+            else:
+                process = subprocess.run(
+                    cmd, capture_output=True, text=True, check=True
+                )
+                print(process.stdout)
