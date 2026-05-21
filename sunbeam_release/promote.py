@@ -60,6 +60,7 @@ OPENSTACK_CHARMS = [
     "openstack-hypervisor",
     "openstack-images-sync-k8s",
     "openstack-network-agents",
+    "openstack-port-cni-k8s",
     "sunbeam-ovn-proxy",
     "placement-k8s",
     "sunbeam-clusterd",
