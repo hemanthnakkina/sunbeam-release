@@ -118,6 +118,20 @@ TRACKS = {
         "designate-bind-k8s": "9",
         "consul": "1.19",
     },
+    "epoxy": {
+        "openstack": "2025.1",
+        "ovn": "25.03",
+        "rabbitmq-k8s": "3.12",
+        "designate-bind-k8s": "9",
+        "consul": "1.19",
+    },
+    "gazpacho": {
+        "openstack": "2026.1",
+        "ovn": "26.03",
+        "rabbitmq-k8s": "3.12",
+        "designate-bind-k8s": "9",
+        "consul": "1.19",
+    }
 }
 
 
