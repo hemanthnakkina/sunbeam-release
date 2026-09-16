@@ -16,9 +16,13 @@
 
 import json
 import subprocess
+import time
+from datetime import datetime
+from pathlib import Path
 from typing import (
     Union,
     List,
+    Tuple,
 )
 
 import click
@@ -94,6 +98,44 @@ CONSUL_SNAPS = [
     "consul-client",
 ]
 
+# Charms from sunbeam dependent projects (sunbeam-terraform plan and
+# snap-openstack manifests), not promoted by this tool - only their
+# track/stable revision is reported.
+# ponytail: static tracks taken from the current terraform plan, update
+# per release if promoting older ones. Per-release tracks (microceph,
+# k8s) live in TRACKS and are resolved via dependent_track; microovn
+# follows the OVN track.
+DEPENDENT_CHARMS = {
+    "mysql-k8s": "8.0",
+    "mysql-router-k8s": "8.0",
+    "traefik-k8s": "latest",
+    "vault-k8s": "1.18",
+    "self-signed-certificates": "1",
+    "manual-tls-certificates": "1",
+    "opentelemetry-collector": "2",
+    "opentelemetry-collector-k8s": "2",
+    "kratos-external-idp-integrator": "0.2",
+    "microceph": None,
+    "microovn": None,
+    "microcluster-token-distributor": "v1",
+    "role-distributor": "latest",
+    "multus": "latest",
+    # observability feature: local COS stack and hardware observer
+    # (the COS traefik instance deploys the same traefik-k8s charm)
+    "alertmanager-k8s": "1",
+    "grafana-k8s": "1",
+    "catalogue-k8s": "1",
+    "prometheus-k8s": "1",
+    "loki-k8s": "1",
+    "hardware-observer": "latest",
+}
+
+DEPENDENT_SNAPS = {
+    "microceph": None,
+    "microovn": None,
+    "k8s": None,
+}
+
 WORKFLOWS = {
     "edge": "beta",
     "beta": "candidate",
@@ -119,6 +161,8 @@ TRACKS = {
         "rabbitmq-k8s": "3.12",
         "designate-bind-k8s": "9",
         "consul": "1.19",
+        "microceph": "squid",
+        "k8s": "1.32-classic",
     },
     "epoxy": {
         "openstack": "2025.1",
@@ -126,13 +170,17 @@ TRACKS = {
         "rabbitmq-k8s": "3.12",
         "designate-bind-k8s": "9",
         "consul": "1.19",
+        "microceph": "squid",
+        "k8s": "1.32-classic",
     },
     "gazpacho": {
         "openstack": "2026.1",
         "ovn": "26.03",
-        "rabbitmq-k8s": "3.12",
+        "rabbitmq-k8s": "4.0",
         "designate-bind-k8s": "9",
         "consul": "1.19",
+        "microceph": "tentacle",
+        "k8s": "1.36-classic",
     }
 }
 
@@ -145,9 +193,26 @@ def charm_metadata(app: str) -> dict:
 
 
 def snap_metadata(snap: str) -> dict:
-    """Retrieve metadata about a specific snap."""
+    """Retrieve metadata about a specific snap.
+
+    Retries once - the snap store intermittently returns transient
+    errors (e.g. 'no snap found') for existing snaps.
+    """
     cmd = ["snap", "info", snap]
-    process = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    for attempt in (0, 1):
+        try:
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            break
+        except subprocess.CalledProcessError:
+            if attempt:
+                raise
+            print(f"  snap info {snap} failed, retrying...")
+            time.sleep(2)
     output = process.stdout.strip()
 
     # Parse the channels section
@@ -196,9 +261,16 @@ def release_command(
     target_channel: str,
     base_channels: List[str] = ["22.04", "24.04"],
     base_archs: List[str] = ["amd64"],
-) -> Union[str, None]:
+) -> Tuple[Union[List[str], None], dict]:
     """Generate a charmcraft release command to promote between tracks."""
     release_cmd = None
+    revisions = {
+        "app": app,
+        "type": "charm",
+        "source_revision": None,
+        "target_revision": None,
+        "promoted": False,
+    }
     charm_info = charm_metadata(app)
     print(
         f"Checking {app}: {track}/{source_channel}->{track}/{target_channel}"
@@ -217,6 +289,15 @@ def release_command(
                             source_release = release
                         if release["channel"] == f"{track}/{target_channel}":
                             target_release = release
+
+                    if source_release:
+                        revisions["source_revision"] = source_release.get(
+                            "revision"
+                        )
+                    if target_release:
+                        revisions["target_revision"] = target_release.get(
+                            "revision"
+                        )
 
                     if source_release and target_release:
                         if source_release["status"] == "tracking":
@@ -247,9 +328,10 @@ def release_command(
                             release_cmd.append(
                                 f"{resource['name']}:{resource['revision']}"
                             )
+                        revisions["promoted"] = True
                         break
 
-    return release_cmd
+    return release_cmd, revisions
 
 
 def snap_promote_command(
@@ -257,10 +339,17 @@ def snap_promote_command(
     track: str,
     source_channel: str,
     target_channel: str,
-) -> Union[str, None]:
+) -> Tuple[Union[List[str], None], dict]:
     """Generate a snapcraft promote command to promote between channels."""
     from_channel = f"{track}/{source_channel}"
     to_channel = f"{track}/{target_channel}"
+    revisions = {
+        "app": snap,
+        "type": "snap",
+        "source_revision": None,
+        "target_revision": None,
+        "promoted": False,
+    }
 
     print(f"Checking snap {snap}: {from_channel}->{to_channel}")
 
@@ -271,14 +360,19 @@ def snap_promote_command(
         source_info = channels.get(from_channel)
         target_info = channels.get(to_channel)
 
+        if isinstance(source_info, dict):
+            revisions["source_revision"] = source_info.get('revision')
+        if isinstance(target_info, dict):
+            revisions["target_revision"] = target_info.get('revision')
+
         # Check if source channel exists and has content
         if source_info is None:
             print(f"  Source channel {from_channel} is empty, skipping")
-            return None
+            return None, revisions
 
         if source_info == 'tracking':
             print(f"  Source channel {from_channel} is tracking, skipping")
-            return None
+            return None, revisions
 
         # Check if target channel exists
         if target_info is None:
@@ -289,7 +383,7 @@ def snap_promote_command(
             # Compare revisions
             if source_info.get('revision') == target_info.get('revision'):
                 print(f"  Source and target revision match ({source_info.get('revision')}), skipping")
-                return None
+                return None, revisions
             else:
                 print(f"  Source revision {source_info.get('revision')} != target revision {target_info.get('revision')}, will promote")
 
@@ -303,11 +397,127 @@ def snap_promote_command(
             to_channel,
         ]
 
-        return promote_cmd
+        revisions["promoted"] = True
+        return promote_cmd, revisions
 
     except subprocess.CalledProcessError as e:
-        print(f"  Error getting snap info: {e}")
-        return None
+        print(f"  Error getting snap info: {e.stderr or e}")
+        return None, revisions
+
+
+def charm_stable_revision(app: str, track: str) -> Union[int, None]:
+    """Retrieve the revision of a charm in track/stable via juju info.
+
+    Used for dependent project charms where charmcraft status is not
+    available (requires charm admin rights). Channel lines look like
+    'channel:  <version>  <date>  (<revision>)  <size>  ...', where
+    version may be non-numeric; the revision is in parentheses.
+    """
+    process = subprocess.run(
+        ["juju", "info", app],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    channel = f"{track}/stable:"
+    in_channels = False
+    last_revision = None
+    for line in process.stdout.splitlines():
+        if line.startswith("channels:"):
+            in_channels = True
+            continue
+        if not in_channels:
+            continue
+        if not line.startswith(" "):
+            break
+        parts = line.strip().split()
+        if not parts:
+            continue
+        if parts[0] == channel:
+            for part in parts:
+                if part.startswith("(") and part.endswith(")"):
+                    return int(part.strip("()"))
+            # "^" tracks the channel above, "--" is empty
+            if len(parts) > 1 and parts[1] == "^":
+                return last_revision
+            return None
+        for part in parts:
+            if part.startswith("(") and part.endswith(")"):
+                last_revision = int(part.strip("()"))
+    return None
+
+
+def snap_stable_revision(snap: str, track: str) -> Union[str, None]:
+    """Retrieve the revision of a snap in track/stable."""
+    info = snap_metadata(snap).get("channels", {}).get(f"{track}/stable")
+    if isinstance(info, dict):
+        return info.get("revision")
+    return None
+
+
+def dependent_track(app: str, release: str) -> Union[str, None]:
+    """Resolve the track for a dependent charm or snap.
+
+    Apps with per-release tracks (microceph, k8s) are looked up in
+    TRACKS; microovn follows the OVN track; the rest use the static
+    track from DEPENDENT_CHARMS/DEPENDENT_SNAPS.
+    """
+    if app == "microovn":
+        return TRACKS[release]["ovn"]
+    if app in TRACKS[release]:
+        return TRACKS[release][app]
+    return DEPENDENT_CHARMS.get(app) or DEPENDENT_SNAPS.get(app)
+
+
+def revision_entries(revs: List[dict]) -> List[dict]:
+    """Convert revision dicts to output entries."""
+    entries = []
+    for rev in revs:
+        current = rev["target_revision"]
+        promoted = rev["source_revision"] if rev["promoted"] else current
+        entries.append(
+            {
+                "app": rev["app"],
+                "current_revision": current,
+                "promoted_revision": promoted,
+            }
+        )
+    return entries
+
+
+def render_table(sections: List[Tuple[str, List[dict]]]) -> str:
+    """Render revision sections as an aligned text table."""
+    lines = []
+    for label, entries in sections:
+        if not entries:
+            continue
+        keys = [k for k in entries[0] if k != "app"]
+        lines.append(label)
+        lines.append(f"{'app':<40} " + " ".join(f"{k:<18}" for k in keys))
+        for entry in entries:
+            row = " ".join(
+                f"{str(entry[k]) if entry[k] is not None else '-':<18}"
+                for k in keys
+            )
+            lines.append(f"{entry['app']:<40} " + row.rstrip())
+    return "\n".join(lines)
+
+
+def render_yaml(sections: List[Tuple[str, List[dict]]]) -> str:
+    """Render revision sections as yaml."""
+    lines = []
+    for label, entries in sections:
+        if not entries:
+            continue
+        lines.append(label)
+        for entry in entries:
+            lines.append(f"- app: {entry['app']}")
+            for key in entry:
+                if key == "app":
+                    continue
+                value = entry[key] if entry[key] is not None else "null"
+                lines.append(f"  {key}: {value}")
+    return "\n".join(lines)
 
 
 @click.command()
@@ -326,7 +536,20 @@ def snap_promote_command(
     show_default=True,
 )
 @click.option("--dry-run", "-d", default=False, is_flag=True)
-def promote(source: str, release: str, dry_run: bool) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    default="both",
+    help="Revision list output format",
+    type=click.Choice(["table", "yaml", "both"]),
+    show_default=True,
+)
+def promote(
+    source: str,
+    release: str,
+    dry_run: bool,
+    output_format: str,
+) -> None:
     """Promote charms between channels."""
     if source not in WORKFLOWS.keys():
         raise click.BadOptionUsage(
@@ -338,70 +561,166 @@ def promote(source: str, release: str, dry_run: bool) -> None:
         )
 
     release_cmds = []
+    revision_list = []
 
     for charm in OPENSTACK_CHARMS:
-        cmd = release_command(
+        cmd, revisions = release_command(
             charm,
             track=TRACKS[release]["openstack"],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
+        revision_list.append(revisions)
         if cmd:
             release_cmds.append(cmd)
 
     for charm in OVN_CHARMS:
-        cmd = release_command(
+        cmd, revisions = release_command(
             charm,
             track=TRACKS[release]["ovn"],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
+        revision_list.append(revisions)
         if cmd:
             release_cmds.append(cmd)
 
     for charm in CONSUL_CHARMS:
         if "consul" in TRACKS[release]:
-            cmd = release_command(
+            cmd, revisions = release_command(
                 charm,
                 track=TRACKS[release]["consul"],
                 source_channel=source,
                 target_channel=WORKFLOWS[source],
             )
+            revision_list.append(revisions)
             if cmd:
                 release_cmds.append(cmd)
 
     for charm in ["rabbitmq-k8s", "designate-bind-k8s"]:
-        cmd = release_command(
+        cmd, revisions = release_command(
             charm,
             track=TRACKS[release][charm],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
+        revision_list.append(revisions)
         if cmd:
             release_cmds.append(cmd)
 
     # Promote OpenStack snaps
     for snap in OPENSTACK_SNAPS:
-        cmd = snap_promote_command(
+        cmd, revisions = snap_promote_command(
             snap,
             track=TRACKS[release]["openstack"],
             source_channel=source,
             target_channel=WORKFLOWS[source],
         )
+        revision_list.append(revisions)
         if cmd:
             release_cmds.append(cmd)
 
     # Promote Consul snaps
     for snap in CONSUL_SNAPS:
         if "consul" in TRACKS[release]:
-            cmd = snap_promote_command(
+            cmd, revisions = snap_promote_command(
                 snap,
                 track=TRACKS[release]["consul"],
                 source_channel=source,
                 target_channel=WORKFLOWS[source],
             )
+            revision_list.append(revisions)
             if cmd:
                 release_cmds.append(cmd)
+
+    for rev in revision_list:
+        current = rev["target_revision"]
+        rev["promoted_revision"] = (
+            rev["source_revision"] if rev["promoted"] else current
+        )
+
+    dependent_charms = []
+    for app in DEPENDENT_CHARMS:
+        track = dependent_track(app, release)
+        if track is None:
+            print(
+                f"Skipping dependent charm {app}:"
+                f" no track for release {release}"
+            )
+            continue
+        channel = f"{track}/stable"
+        print(f"Checking dependent charm {app}: {channel}")
+        try:
+            stable_revision = charm_stable_revision(app, track)
+        except subprocess.CalledProcessError as e:
+            print(f"  Error getting charm info: {e.stderr or e}")
+            stable_revision = None
+        dependent_charms.append(
+            {
+                "app": app,
+                "channel": channel,
+                "stable_revision": stable_revision,
+            }
+        )
+
+    dependent_snaps = []
+    for snap in DEPENDENT_SNAPS:
+        track = dependent_track(snap, release)
+        if track is None:
+            print(
+                f"Skipping dependent snap {snap}:"
+                f" no track for release {release}"
+            )
+            continue
+        channel = f"{track}/stable"
+        print(f"Checking dependent snap {snap}: {channel}")
+        try:
+            stable_revision = snap_stable_revision(snap, track)
+        except subprocess.CalledProcessError as e:
+            print(f"  Error getting snap info: {e.stderr or e}")
+            stable_revision = None
+        dependent_snaps.append(
+            {
+                "app": snap,
+                "channel": channel,
+                "stable_revision": stable_revision,
+            }
+        )
+
+    sections = [
+        (
+            "charms:",
+            revision_entries(
+                [r for r in revision_list if r["type"] == "charm"]
+            ),
+        ),
+        (
+            "snaps:",
+            revision_entries(
+                [r for r in revision_list if r["type"] == "snap"]
+            ),
+        ),
+        ("dependent_charms:", dependent_charms),
+        ("dependent_snaps:", dependent_snaps),
+    ]
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    base_name = (
+        f"{release}-{source}-to-{WORKFLOWS[source]}-{timestamp}"
+    )
+    if output_format in ("table", "both"):
+        filename = f"{base_name}.txt"
+        table = (
+            f"Revision list (channel {WORKFLOWS[source]}:"
+            " current -> promoted):\n"
+            + render_table(sections)
+        )
+        Path(filename).write_text(table + "\n")
+        print(f"Revision table written to {filename}")
+    if output_format in ("yaml", "both"):
+        filename = f"{base_name}.yaml"
+        Path(filename).write_text(render_yaml(sections) + "\n")
+        print(f"Revision yaml written to {filename}")
 
     for cmd in release_cmds:
         pcmd = " ".join(cmd)
