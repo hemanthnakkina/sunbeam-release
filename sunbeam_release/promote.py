@@ -80,7 +80,7 @@ OVN_CHARMS = [
     "ovn-central-k8s",
 ]
 
-CONSUL_CHARMS =[
+CONSUL_CHARMS = [
     "consul-k8s",
     "consul-client",
 ]
@@ -181,7 +181,7 @@ TRACKS = {
         "consul": "1.19",
         "microceph": "tentacle",
         "k8s": "1.36-classic",
-    }
+    },
 }
 
 
@@ -219,39 +219,39 @@ def snap_metadata(snap: str) -> dict:
     channels = {}
     in_channels_section = False
 
-    for line in output.split('\n'):
-        if line.startswith('channels:'):
+    for line in output.split("\n"):
+        if line.startswith("channels:"):
             in_channels_section = True
             continue
 
         if in_channels_section:
             # Stop if we hit an empty line or a new section
-            if not line.strip() or (line and not line.startswith(' ')):
+            if not line.strip() or (line and not line.startswith(" ")):
                 break
 
             # Parse channel line format: "  track/risk:  version date (revision) size -"
             parts = line.strip().split()
             if len(parts) >= 2:
-                channel = parts[0].rstrip(':')
-                if parts[1] == '--':
+                channel = parts[0].rstrip(":")
+                if parts[1] == "--":
                     # Channel is empty
                     channels[channel] = None
-                elif parts[1] == '^':
+                elif parts[1] == "^":
                     # Channel is tracking the channel above
-                    channels[channel] = 'tracking'
+                    channels[channel] = "tracking"
                 else:
                     # Extract revision from parentheses
                     revision = None
                     for part in parts:
-                        if part.startswith('(') and part.endswith(')'):
-                            revision = part.strip('()')
+                        if part.startswith("(") and part.endswith(")"):
+                            revision = part.strip("()")
                             break
                     channels[channel] = {
-                        'version': parts[1],
-                        'revision': revision
+                        "version": parts[1],
+                        "revision": revision,
                     }
 
-    return {'channels': channels}
+    return {"channels": channels}
 
 
 def release_command(
@@ -355,37 +355,41 @@ def snap_promote_command(
 
     try:
         snap_info = snap_metadata(snap)
-        channels = snap_info.get('channels', {})
+        channels = snap_info.get("channels", {})
 
         source_info = channels.get(from_channel)
         target_info = channels.get(to_channel)
 
         if isinstance(source_info, dict):
-            revisions["source_revision"] = source_info.get('revision')
+            revisions["source_revision"] = source_info.get("revision")
         if isinstance(target_info, dict):
-            revisions["target_revision"] = target_info.get('revision')
+            revisions["target_revision"] = target_info.get("revision")
 
         # Check if source channel exists and has content
         if source_info is None:
             print(f"  Source channel {from_channel} is empty, skipping")
             return None, revisions
 
-        if source_info == 'tracking':
+        if source_info == "tracking":
             print(f"  Source channel {from_channel} is tracking, skipping")
             return None, revisions
 
         # Check if target channel exists
         if target_info is None:
             print(f"  Target channel {to_channel} is empty, will promote")
-        elif target_info == 'tracking':
+        elif target_info == "tracking":
             print(f"  Target channel {to_channel} is tracking, will promote")
         elif isinstance(source_info, dict) and isinstance(target_info, dict):
             # Compare revisions
-            if source_info.get('revision') == target_info.get('revision'):
-                print(f"  Source and target revision match ({source_info.get('revision')}), skipping")
+            if source_info.get("revision") == target_info.get("revision"):
+                print(
+                    f"  Source and target revision match ({source_info.get('revision')}), skipping"
+                )
                 return None, revisions
             else:
-                print(f"  Source revision {source_info.get('revision')} != target revision {target_info.get('revision')}, will promote")
+                print(
+                    f"  Source revision {source_info.get('revision')} != target revision {target_info.get('revision')}, will promote"
+                )
 
         promote_cmd = [
             "snapcraft",
@@ -705,15 +709,12 @@ def promote(
     ]
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    base_name = (
-        f"{release}-{source}-to-{WORKFLOWS[source]}-{timestamp}"
-    )
+    base_name = f"{release}-{source}-to-{WORKFLOWS[source]}-{timestamp}"
     if output_format in ("table", "both"):
         filename = f"{base_name}.txt"
         table = (
             f"Revision list (channel {WORKFLOWS[source]}:"
-            " current -> promoted):\n"
-            + render_table(sections)
+            " current -> promoted):\n" + render_table(sections)
         )
         Path(filename).write_text(table + "\n")
         print(f"Revision table written to {filename}")
