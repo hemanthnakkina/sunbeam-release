@@ -12,11 +12,16 @@ snap:
 
     sudo snap install --classic charmcraft
     sudo snap install snapcraft
+    sudo snap install juju --channel=3.6/stable
 
 charmcraft must also be logged into the charmhub in order for sunbeam-release
 operators to work:
 
     charmcraft login
+
+The revision of dependent project charms (which sunbeam-release does not
+administer) is looked up with `juju info`, and dependent snaps with
+`snap info`.
 
 ## Promotion of charms between channels
 
