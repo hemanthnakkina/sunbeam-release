@@ -24,6 +24,7 @@ on:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    environment: promotion
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
