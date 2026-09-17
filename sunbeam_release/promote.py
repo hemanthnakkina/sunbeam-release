@@ -421,6 +421,7 @@ def snap_promote_command(
             from_channel,
             "--to-channel",
             to_channel,
+            "--yes",
         ]
 
         revisions["promoted"] = True

@@ -128,7 +128,16 @@ def test_snap_promote_command_records_revisions():
             source_channel="candidate",
             target_channel="stable",
         )
-    assert cmd is not None
+    assert cmd == [
+        "snapcraft",
+        "promote",
+        "openstack",
+        "--from-channel",
+        "2023.1/candidate",
+        "--to-channel",
+        "2023.1/stable",
+        "--yes",
+    ]
     assert revisions["type"] == "snap"
     assert revisions["source_revision"] == "100"
     assert revisions["target_revision"] == "99"
